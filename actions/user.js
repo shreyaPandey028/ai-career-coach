@@ -1,14 +1,7 @@
 "use server";
 
 import { db } from "@/lib/prisma";
-import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
-import { generateAIInsights } from "./dashboard";
-
-"use server";
-
-import { db } from "@/lib/prisma";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server"; // Ensure this is the only import for auth
 import { revalidatePath } from "next/cache";
 import { generateAIInsights } from "./dashboard";
 
@@ -23,21 +16,18 @@ export async function updateUser(data) {
   if (!user) throw new Error("User not found");
 
   try {
-    // Start a transaction to handle both operations
     const result = await db.$transaction(
       async (tx) => {
-        // First check if industry exists
         let industryInsight = await tx.industryInsight.findUnique({
           where: {
             industry: data.industry,
           },
         });
 
-        // If industry doesn't exist, create it with default values
         if (!industryInsight) {
           const insights = await generateAIInsights(data.industry);
 
-          industryInsight = await db.industryInsight.create({
+          industryInsight = await tx.industryInsight.create({
             data: {
               industry: data.industry,
               ...insights,
@@ -46,7 +36,6 @@ export async function updateUser(data) {
           });
         }
 
-        // Now update the user
         const updatedUser = await tx.user.update({
           where: {
             id: user.id,
@@ -62,29 +51,21 @@ export async function updateUser(data) {
         return { updatedUser, industryInsight };
       },
       {
-        timeout: 10000, // default: 5000
+        timeout: 10000,
       }
     );
 
     revalidatePath("/");
-    return result.user;
+    return result.updatedUser;
   } catch (error) {
     console.error("Error updating user and industry:", error.message);
     throw new Error("Failed to update profile");
   }
 }
 
-// ... rest of the file (getUserOnboardingStatus) ...
-
 export async function getUserOnboardingStatus() {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
-
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
-
-  if (!user) throw new Error("User not found");
 
   try {
     const user = await db.user.findUnique({
@@ -104,3 +85,4 @@ export async function getUserOnboardingStatus() {
     throw new Error("Failed to check onboarding status");
   }
 }
+// ...existing code...
